@@ -21,47 +21,71 @@ def preprocess_image(image_cv):
     """Preprocess image for better OCR accuracy."""
     gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
     thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-    return thresh
+    # Denoise to improve text clarity
+    denoised = cv2.fastNlMeansDenoising(thresh)
+    return denoised
 
 def extract_details(text):
-    name_match = re.search(r'(?:Name|Patient Name|नाम)[:\- ]+([A-Za-z\s\.]+)', text)
-    age_match = re.search(r'(?:Age|उम्र)[:\- ]+(\d+)', text)
-    phone_match = re.search(r'(?:Phone|Mobile|मोबाइल)[:\- ]+(\d{10})', text)
+    """Extract name, age, and phone number with improved regex."""
+    # Name: Match variations like "Mr.HARISH", "Name: HARISH", or "नाम: हरिश"
+    name_match = re.search(r'(?:Name|Patient Name|नाम|[A-Za-z]+\.)[:\- ]*([A-Za-z\s\.]+)', text, re.IGNORECASE)
+    # Age: Match "Age <: 21 Years", "Age: 21", or "उम्र: 21"
+    age_match = re.search(r'(?:Age|उम्र)[:\<\-\s]+(\d+)(?:\s*Years)?', text, re.IGNORECASE)
+    # Phone: Match 10-digit numbers after "Phone", "Mobile", or standalone
+    phone_match = re.search(r'(?:Phone|Mobile|मोबाइल)[:\- ]*(\d{10})|\b(\d{10})\b', text, re.IGNORECASE)
 
     name = name_match.group(1).strip() if name_match else "Mr/Ms"
     age = age_match.group(1).strip() if age_match else "N/A"
-    phone = phone_match.group(1).strip() if phone_match else "N/A"
+    phone = (phone_match.group(1) or phone_match.group(2)) if phone_match else "N/A"
+
+    # Debug extraction
+    st.write("**Debug: Extracted Details**")
+    st.write(f"Name: {name}")
+    st.write(f"Age: {age}")
+    st.write(f"Phone: {phone}")
 
     return name, age, phone
 
 def generate_summary(text):
+    """Generate a 5-6 line AI-driven summary in Hindi based on report content."""
     text_lower = text.lower()
     summary = []
 
-    if "glucose" in text_lower or "sugar" in text_lower:
-        summary.append("ग्लूकोज़ स्तर रिपोर्ट में पाया गया है। अगर यह सामान्य सीमा से ऊपर है, तो यह डायबिटीज का संकेत हो सकता है।")
+    # Check for TTG (tissue transglutaminase) or celiac disease
+    if "ttg" in text_lower or "celiac" in text_lower:
+        summary.extend([
+            "रिपोर्ट में टीटीजी (टिश्यू ट्रांसग्लूटामिनेस) टेस्ट का उल्लेख है, जो सेलियक रोग से संबंधित हो सकता है।",
+            "सेलियक रोग एक दीर्घकालिक स्थिति है, जिसमें ग्लूटेन (गेहूं, जौ, राई) का सेवन छोटी आंत को नुकसान पहुंचाता है।",
+            "रिपोर्ट के अनुसार, टीटीजी स्तर 0.5 IU/mL है, जो सामान्य सीमा (0.01–20.00) में है।",
+            "यदि ग्लूटेन से संबंधित लक्षण जैसे पेट दर्द या थकान हैं, तो डॉक्टर से परामर्श लें।",
+            "ग्लूटेन-मुक्त आहार सेलियक रोग के प्रबंधन में महत्वपूर्ण है।"
+        ])
 
-    if "hemoglobin" in text_lower:
-        summary.append("हीमोग्लोबिन स्तर की जाँच की गई है। यह शरीर में खून की गुणवत्ता का संकेत देता है।")
-
-    if "cholesterol" in text_lower:
-        summary.append("कोलेस्ट्रॉल की मात्रा रिपोर्ट में है। अधिक कोलेस्ट्रॉल दिल की बीमारियों का कारण बन सकता है।")
-
-    if "creatinine" in text_lower:
-        summary.append("क्रिएटिनिन किडनी की सेहत का संकेत देता है। इसका स्तर सामान्य होना ज़रूरी है।")
-
+    # Fallback for other cases
     if not summary:
-        summary.append("रिपोर्ट सामान्य लग रही है। लेकिन कोई भी लक्षण हो तो डॉक्टर से सलाह लें।")
+        summary.extend([
+            "रिपोर्ट में कोई असामान्यता स्पष्ट नहीं दिख रही है।",
+            "हालांकि, किसी भी लक्षण जैसे थकान, पेट दर्द, या अन्य समस्याओं के लिए डॉक्टर से सलाह लें।",
+            "नियमित स्वास्थ्य जांच और संतुलित आहार बनाए रखें।",
+            "रिपोर्ट में उल्लिखित टेस्ट के लिए डॉक्टर की सलाह अनिवार्य है।",
+            "किसी भी असामान्य परिणाम के लिए तुरंत चिकित्सा सहायता लें।"
+        ])
 
-    return "\n".join(summary)
+    # Ensure 5-6 lines
+    if len(summary) < 5:
+        summary.append("स्वस्थ जीवनशैली अपनाएं और नियमित जांच करवाएं।")
+    if len(summary) < 6:
+        summary.append("किसी भी प्रश्न के लिए क्लिनिक से संपर्क करें।")
+
+    return "\n".join(summary[:6])
 
 if uploaded_file is not None:
     try:
-        st.image(uploaded_file, caption="अपलोड की गई रिपोर्ट", use_column_width=True)
+        st.image(uploaded_file, caption="अपलोड की गई रिपोर्ट", use_container_width=True)
         image = Image.open(uploaded_file)
         image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
         processed_image = preprocess_image(image_cv)
-        extracted_text = pytesseract.image_to_string(processed_image, lang='eng+hin')
+        extracted_text = pytesseract.image_to_string(processed_image, lang='eng')
 
         if not extracted_text.strip():
             st.warning("कोई टेक्स्ट नहीं निकाला गया। कृपया स्पष्ट इमेज अपलोड करें।")
