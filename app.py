@@ -1,10 +1,13 @@
 import streamlit as st
-import pytesseract
+try:
+    import pytesseract
+    import cv2
+except ImportError as e:
+    st.error(f"Required library missing: {e}. Please contact the app administrator.")
+    st.stop()
 from PIL import Image
 import numpy as np
-import cv2
 import re
-from googletrans import Translator
 
 # Page config
 st.set_page_config(page_title="Reportslelo", layout="centered")
@@ -13,6 +16,12 @@ st.title("🧾 Reportslelo - Lab Report Analyzer")
 st.markdown("##### Harish Choudhary Clinic | 📞 8209558359")
 
 uploaded_file = st.file_uploader("कृपया रिपोर्ट इमेज अपलोड करें 📤", type=["jpg", "png", "jpeg"])
+
+def preprocess_image(image_cv):
+    """Preprocess image for better OCR accuracy."""
+    gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    return thresh
 
 def extract_details(text):
     name_match = re.search(r'(?:Name|Patient Name|नाम)[:\- ]+([A-Za-z\s\.]+)', text)
@@ -47,18 +56,24 @@ def generate_summary(text):
     return "\n".join(summary)
 
 if uploaded_file is not None:
-    st.image(uploaded_file, caption="अपलोड की गई रिपोर्ट", use_column_width=True)
-    image = Image.open(uploaded_file)
-    image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-    extracted_text = pytesseract.image_to_string(image_cv, lang='eng')
+    try:
+        st.image(uploaded_file, caption="अपलोड की गई रिपोर्ट", use_column_width=True)
+        image = Image.open(uploaded_file)
+        image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        processed_image = preprocess_image(image_cv)
+        extracted_text = pytesseract.image_to_string(processed_image, lang='eng+hin')
 
-    st.subheader("📄 रिपोर्ट से निकाला गया टेक्स्ट:")
-    st.text(extracted_text)
+        if not extracted_text.strip():
+            st.warning("कोई टेक्स्ट नहीं निकाला गया। कृपया स्पष्ट इमेज अपलोड करें।")
+            st.stop()
 
-    name, age, phone = extract_details(extracted_text)
-    report_summary = generate_summary(extracted_text)
+        st.subheader("📄 रिपोर्ट से निकाला गया टेक्स्ट:")
+        st.text(extracted_text)
 
-    final_message = f"""👤 नाम: {name}
+        name, age, phone = extract_details(extracted_text)
+        report_summary = generate_summary(extracted_text)
+
+        final_message = f"""👤 नाम: {name}
 🎂 उम्र: {age} साल
 📱 संपर्क: {phone}
 
@@ -68,5 +83,7 @@ if uploaded_file is not None:
 🏥 Harish Choudhary Clinic
 📞 8209558359"""
 
-    st.subheader("📲 मरीज को भेजे जाने वाला मैसेज:")
-    st.text(final_message)
+        st.subheader("📲 मरीज को भेजे जाने वाला मैसेज:")
+        st.text(final_message)
+    except Exception as e:
+        st.error(f"इमेज प्रोसेसिंग में त्रुटि: {e}")
