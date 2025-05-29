@@ -1,1 +1,4 @@
-tesseract-ocr
+libopencv-dev
+libpng-dev
+libjpeg-dev
+libgl1-mesa-glx
