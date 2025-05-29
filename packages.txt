@@ -1,4 +1,2 @@
-libopencv-dev
-libpng-dev
-libjpeg-dev
 libgl1-mesa-glx
+libgl1
