@@ -1,4 +1,2 @@
-libopencv-dev
-libpng-dev
-libjpeg-dev
-libgl1-mesa-glx
+googletrans==3.1.0a0  # Newer version that doesn't depend on httpx
+opencv-python-headless==4.11.0.86  # Use headless version to avoid libGL issues
